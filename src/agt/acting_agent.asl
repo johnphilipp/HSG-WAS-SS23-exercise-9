@@ -6,6 +6,8 @@
 // that describes a Thing of type https://ci.mines-stetienne.fr/kg/ontology#PhantomX
 robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/tds/leubot1.ttl").
 
+degrees(Celcius) :- temperature(Celcius)[source(Agent)] & p(Value,Agent).
+
 /* Initial goals */
 !start. // the agent has the goal to start
 
@@ -17,7 +19,8 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 */
 @start_plan
 +!start : true <-
-	.print("Hello world").
+	.broadcast(askOne,certified_reputation(CertificationAgent, SourceAgent, MessageContent, CRRating) );
+	.print("Hello, world!").
 
 /* 
  * Plan for reacting to the addition of the belief organization_deployed(OrgName)
@@ -84,6 +87,66 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 +!select_reading(TempReadings, Celcius) : true <-
     .nth(0, TempReadings, Celcius).
 
+@select_highest_trust_reading_plan
++!select_highest_trust_reading : true <-
+	.findall(Agent, interaction_trust(_, Agent, _, _), Agents);
+	!calc(Agents, 3); // Change this to 1, 3, or 4 to calculate the average trust level based on the different trust ratings
+	.findall(p(Value, Agent), trust_level(Value, Agent), Result);
+	.max(Result, Max);
+	.print("Max: ", Max);
+	+Max;
+	?degrees(Celcius);
+	.print("Trusted degree: ", Celcius).
+
++!calc(Agents, Task) : Agents \== [] <-
+	.nth(0, Agents, Agent0);
+    .findall(T, interaction_trust(_,Agent0,_,T), IntTrust);
+	.length(IntTrust, LenIntTrust);
+	!sum(IntTrust, SumIntTrust);
+    
+    if ( Task == 1 ) { 
+		.print("Calc Task 1 for Agent: ", Agent0);
+		Avg = SumIntTrust / LenIntTrust;
+		+trust_level(Avg, Agent0);
+    	.delete(Agent0, Agents, Remaining);
+    	!calc(Remaining, 1);
+	}
+	if ( Task == 3 | Task == 4 ) {
+		.print("Calc Task 3/4 for Agent: ", Agent0);
+		.findall(W, witness_reputation(_,Agent0,_,W), WitRep);
+		.length(WitRep, LenWitRep);
+		!sum(WitRep, SumWitRep);
+		.findall(C, certified_reputation(_,Agent0,_,C), CertRep);
+		.length(CertRep, LenCertRep);
+		!sum(CertRep, SumCertRep);
+	}
+	if ( Task == 3 ) { 
+		.print("Calc Task 3 for Agent: ", Agent0);
+		Avg = ((SumIntTrust / LenIntTrust) / 2) + (SumCertRep / LenCertRep) / 2;
+		+trust_level(Avg, Agent0);
+		.delete(Agent0, Agents, Remaining);
+		!calc(Remaining, 3);
+	}
+	if ( Task == 4 ) { 
+		.print("Calc Task 4 for Agent: ", Agent0);
+		Avg = ((SumIntTrust / LenIntTrust) / 3) + (SumCertRep / LenCertRep) / 3 + ((SumWitRep / LenWitRep) / 3);
+    	+trust_level(Avg, Agent0);
+    	.delete(Agent0, Agents, Remaining);
+    	!calc(Remaining, 4);
+	}.
+
++!calc(Agents, _) : true <-
+    .print("Finished").
+
++!sum(List, Result) : true
+  <- !calculate_sum(List, 0, Result).
+
++!calculate_sum([], Accumulator, Accumulator) : true.
+
++!calculate_sum([Head|Tail], Accumulator, Result) : true <- 
+	NewAccumulator = Accumulator + Head;
+    !calculate_sum(Tail, NewAccumulator, Result).
+
 /* 
  * Plan for reacting to the addition of the goal !manifest_temperature
  * Triggering event: addition of goal !manifest_temperature
@@ -102,6 +165,8 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 
 	// creates goal to select one broadcasted reading to manifest
 	!select_reading(TempReadings, Celcius);
+
+	!select_highest_trust_reading;
 
 	// manifests the selected reading stored in the variable Celcius
 	.print("Manifesting temperature (Celcius): ", Celcius);
